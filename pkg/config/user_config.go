@@ -376,6 +376,8 @@ type GitConfig struct {
 	RemoteBranchSortOrder string `yaml:"remoteBranchSortOrder" jsonschema:"enum=date,enum=alphabetical"`
 	// When copying commit hashes to the clipboard, truncate them to this length. Set to 40 to disable truncation.
 	TruncateCopiedCommitHashesTo int `yaml:"truncateCopiedCommitHashesTo"`
+	// Shell command used to reorder the files of a commit in the commit files panel (`<ctrl+a>`), e.g. into a reading order chosen by an AI. It receives the file paths on stdin, one per line, and must print the same paths, one per line, in the new order.
+	CommitFilesSortCommand string `yaml:"commitFilesSortCommand"`
 }
 
 type DiffRendererCommandType string
@@ -674,6 +676,7 @@ type KeybindingStashConfig struct {
 
 type KeybindingCommitFilesConfig struct {
 	CheckoutCommitFile Keybinding `yaml:"checkoutCommitFile"`
+	SortFiles          Keybinding `yaml:"sortFiles"`
 }
 
 type KeybindingMainConfig struct {
@@ -993,6 +996,7 @@ func GetDefaultConfigForPlatform(platform string) *UserConfig {
 			BranchPrefix:                 "",
 			ParseEmoji:                   false,
 			TruncateCopiedCommitHashesTo: 12,
+			CommitFilesSortCommand:       "claude -p --model opus --effort low 'Order these changed files for reading, so a reviewer understands the feature flow (config/schema, db, contract, domain logic, api, ui, tests). Output only the same file paths, one per line, nothing else.'",
 		},
 		Worktree: WorktreeConfig{
 			DefaultPath: "",
@@ -1189,6 +1193,7 @@ func GetDefaultConfigForPlatform(platform string) *UserConfig {
 			},
 			CommitFiles: KeybindingCommitFilesConfig{
 				CheckoutCommitFile: Keybinding{"c"},
+				SortFiles:          Keybinding{"<c-a>"},
 			},
 			Main: KeybindingMainConfig{
 				PrevHunk:         Keybinding{"<left>", "h"},

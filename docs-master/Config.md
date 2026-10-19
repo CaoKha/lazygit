@@ -574,6 +574,12 @@ git:
   # to 40 to disable truncation.
   truncateCopiedCommitHashesTo: 12
 
+  # Shell command used to reorder the files of a commit in the commit files panel
+  # (`<ctrl+a>`), e.g. into a reading order chosen by an AI. It receives the file
+  # paths on stdin, one per line, and must print the same paths, one per line, in
+  # the new order.
+  commitFilesSortCommand: claude -p --model opus --effort low 'Order these changed files for reading, so a reviewer understands the feature flow (config/schema, db, contract, domain logic, api, ui, tests). Output only the same file paths, one per line, nothing else.'
+
 # Config relating to git worktrees
 worktree:
   # Default parent directory for new worktrees. It is offered as a candidate
@@ -856,6 +862,7 @@ keybinding:
     renameStash: r
   commitFiles:
     checkoutCommitFile: c
+    sortFiles: <c-a>
   main:
     prevHunk: [<left>, h]
     nextHunk: [<right>, l]

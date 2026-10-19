@@ -163,6 +163,8 @@ var tests = []*components.IntegrationTest{
 	commit.Search,
 	commit.SetAuthor,
 	commit.SetAuthorRange,
+	commit.SortCommitFiles,
+	commit.SortCommitFilesWithFailingCommand,
 	commit.StageRangeOfLines,
 	commit.Staged,
 	commit.StagedWithoutHooks,

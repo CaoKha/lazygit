@@ -117,6 +117,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 | `` a `` | すべてのファイルを切り替え | コミットのすべてのファイルをカスタムパッチに追加/削除します。https://github.com/jesseduffield/lazygit#rebase-magic-custom-patchesを参照してください。 |
 | `` <enter> `` | Focus file diff / Toggle directory | If a file is selected, focus its diff so you can act on individual lines. If it is a directory, collapse or expand it. |
 | `` ` `` | ファイルツリービューを切り替え | ファイル表示をフラット表示とツリー表示で切り替えます。フラット表示はすべてのファイルパスを一覧で表示し、ツリー表示はディレクトリごとにファイルをグループ化します。<br><br>デフォルトは設定ファイル内の 'gui.showFileTree' キーで変更できます。 |
+| `` <ctrl+a> `` | AI sort files | Reorder the files into a reading order chosen by the command configured with the key 'git.commitFilesSortCommand'. Switches to flat layout, since the tree layout is always sorted by path. |
 | `` - `` | すべてのファイルを折りたたむ | ファイルツリー内のすべてのディレクトリを折りたたみます |
 | `` = `` | すべてのファイルを展開 | ファイルツリー内のすべてのディレクトリを展開します |
 | `` 0 `` | メインビューにフォーカス |  |

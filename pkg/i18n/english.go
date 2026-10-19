@@ -56,6 +56,14 @@ type TranslationSet struct {
 	ToggleStagedAllTooltip                string
 	ToggleTreeView                        string
 	ToggleTreeViewTooltip                 string
+	SortCommitFiles                       string
+	SortCommitFilesTooltip                string
+	SortingCommitFilesStatus              string
+	SortCommitFilesFailed                 string
+	SortCommitFilesMissingFile            string
+	SortCommitFilesMissingFiles           string
+	SortCommitFilesUnknownFile            string
+	SortCommitFilesDuplicateFile          string
 	OpenDiffTool                          string
 	OpenMergeTool                         string
 	Refresh                               string
@@ -1265,6 +1273,14 @@ func EnglishTranslationSet() *TranslationSet {
 		ToggleStagedAllTooltip:               "Toggle staged/unstaged for all files in working tree.",
 		ToggleTreeView:                       "Toggle file tree view",
 		ToggleTreeViewTooltip:                "Toggle file view between flat and tree layout. Flat layout shows all file paths in a single list, tree layout groups files by directory.\n\nThe default can be changed in the config file with the key 'gui.showFileTree'.",
+		SortCommitFiles:                      "AI sort files",
+		SortCommitFilesTooltip:               "Reorder the files into a reading order chosen by the command configured with the key 'git.commitFilesSortCommand'. Switches to flat layout, since the tree layout is always sorted by path.",
+		SortingCommitFilesStatus:             "Sorting files",
+		SortCommitFilesFailed:                "AI sort failed: %s",
+		SortCommitFilesMissingFile:           "missing 1 file",
+		SortCommitFilesMissingFiles:          "missing %d files",
+		SortCommitFilesUnknownFile:           "unknown file %s",
+		SortCommitFilesDuplicateFile:         "duplicate file %s",
 		OpenDiffTool:                         "Open external diff tool (git difftool)",
 		OpenMergeTool:                        "Open external merge tool",
 		Refresh:                              "Refresh",

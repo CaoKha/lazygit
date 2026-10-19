@@ -151,6 +151,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 | `` a `` | Alternar todos os arquivos | Adicionar/remover todos os arquivos de commit para atualização personalizada. Consulte https://github.com/jesseduffield/lazygit#rebase-magic-custom-patches. |
 | `` <enter> `` | Focus file diff / Toggle directory | If a file is selected, focus its diff so you can act on individual lines. If it is a directory, collapse or expand it. |
 | `` ` `` | Alternar exibição de árvore de arquivo | Toggle file view between flat and tree layout. Flat layout shows all file paths in a single list, tree layout groups files by directory.<br><br>The default can be changed in the config file with the key 'gui.showFileTree'. |
+| `` <ctrl+a> `` | AI sort files | Reorder the files into a reading order chosen by the command configured with the key 'git.commitFilesSortCommand'. Switches to flat layout, since the tree layout is always sorted by path. |
 | `` - `` | Recolher todos os arquivos | Recolher todos os diretórios na árvore de arquivos |
 | `` = `` | Expandir todos os arquivos | Expandir todos os diretórios na árvore do arquivo |
 | `` 0 `` | Focar visualização principal |  |

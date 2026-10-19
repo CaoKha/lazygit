@@ -14,6 +14,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/gui/controllers/helpers"
 	"github.com/jesseduffield/lazygit/pkg/gui/filetree"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
+	"github.com/jesseduffield/lazygit/pkg/i18n"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 	"github.com/samber/lo"
 )
@@ -131,6 +132,13 @@ func (self *CommitFilesController) GetKeybindings(opts types.KeybindingsOpts) []
 			Handler:     self.toggleTreeView,
 			Description: self.c.Tr.ToggleTreeView,
 			Tooltip:     self.c.Tr.ToggleTreeViewTooltip,
+		},
+		{
+			Keys:            opts.GetKeys(opts.Config.CommitFiles.SortFiles),
+			Handler:         self.sortFiles,
+			Description:     self.c.Tr.SortCommitFiles,
+			Tooltip:         self.c.Tr.SortCommitFilesTooltip,
+			DisplayOnScreen: true,
 		},
 		{
 			Keys:              opts.GetKeys(opts.Config.Files.CollapseAll),
@@ -581,6 +589,83 @@ func (self *CommitFilesController) toggleTreeView() error {
 
 	self.c.PostRefreshUpdate(self.context())
 	return nil
+}
+
+// sortFiles reorders the files with the user's sort command, which gets the paths
+// on stdin and prints them in the new order. It runs in the background, and if
+// it fails we only show a toast and leave the list as it is.
+func (self *CommitFilesController) sortFiles() error {
+	paths := lo.Map(self.c.Model().CommitFiles, func(file *models.CommitFile, _ int) string {
+		return file.Path
+	})
+	if len(paths) == 0 {
+		return nil
+	}
+
+	from, to := self.context().GetFromAndToForDiff()
+	cmdObj := self.c.OS().Cmd.NewShell(self.c.UserConfig().Git.CommitFilesSortCommand, self.c.UserConfig().OS.ShellFunctionsFile).
+		SetStdin(strings.Join(paths, "\n") + "\n")
+
+	return self.c.WithWaitingStatus(self.c.Tr.SortingCommitFilesStatus, func(gocui.Task) error {
+		output, _, err := cmdObj.RunWithOutputs()
+		var order []string
+		if err == nil {
+			order, err = parseFileOrder(self.c.Tr, paths, output)
+		}
+
+		self.c.OnUIThread(func() error {
+			if err != nil {
+				firstLine, _, _ := strings.Cut(strings.TrimSpace(err.Error()), "\n")
+				self.c.ErrorToast(fmt.Sprintf(self.c.Tr.SortCommitFilesFailed, firstLine))
+				return nil
+			}
+
+			// the user may have moved on to another commit in the meantime
+			if newFrom, newTo := self.context().GetFromAndToForDiff(); newFrom != from || newTo != to {
+				return nil
+			}
+
+			viewModel := self.context().CommitFileTreeViewModel
+			if viewModel.InTreeMode() {
+				viewModel.ToggleShowTree()
+			}
+			selectedPath := viewModel.GetSelectedPath()
+			viewModel.SetCustomOrder(order)
+			viewModel.SetTree()
+			viewModel.SelectPath(selectedPath, self.c.UserConfig().Gui.ShowRootItemInFileTree)
+			self.c.PostRefreshUpdate(self.context())
+			return nil
+		})
+		return nil
+	})
+}
+
+// parseFileOrder parses the output of the sort command, which must contain each
+// of the given paths exactly once, one per line.
+func parseFileOrder(tr *i18n.TranslationSet, paths []string, output string) ([]string, error) {
+	remaining := lo.SliceToMap(paths, func(path string) (string, bool) { return path, true })
+	order := []string{}
+	for line := range strings.SplitSeq(output, "\n") {
+		path := strings.TrimSpace(line)
+		if path == "" {
+			continue
+		}
+		if !remaining[path] {
+			if lo.Contains(order, path) {
+				return nil, fmt.Errorf(tr.SortCommitFilesDuplicateFile, path)
+			}
+			return nil, fmt.Errorf(tr.SortCommitFilesUnknownFile, path)
+		}
+		delete(remaining, path)
+		order = append(order, path)
+	}
+	if len(remaining) == 1 {
+		return nil, errors.New(tr.SortCommitFilesMissingFile)
+	}
+	if len(remaining) > 1 {
+		return nil, fmt.Errorf(tr.SortCommitFilesMissingFiles, len(remaining))
+	}
+	return order, nil
 }
 
 func (self *CommitFilesController) collapseAll() error {

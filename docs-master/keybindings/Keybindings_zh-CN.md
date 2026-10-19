@@ -181,6 +181,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 | `` a `` | 操作所有文件 | 添加或删除所有提交中的文件到自定义的补丁中。请参阅 https://github.com/jesseduffield/lazygit#rebase-magic-custom-patches。 |
 | `` <enter> `` | Focus file diff / Toggle directory | If a file is selected, focus its diff so you can act on individual lines. If it is a directory, collapse or expand it. |
 | `` ` `` | 切换文件树视图 | 在平面布局和树布局之间切换文件视图。平面布局在单个列表中显示所有文件路径，树布局按目录分组文件。<br><br>可以在配置文件中使用 'gui.showFileTree' 键更改默认设置。 |
+| `` <ctrl+a> `` | AI sort files | Reorder the files into a reading order chosen by the command configured with the key 'git.commitFilesSortCommand'. Switches to flat layout, since the tree layout is always sorted by path. |
 | `` - `` | 折叠全部文件 | 折叠文件树中的全部目录 |
 | `` = `` | 展开全部文件 | 展开文件树中的全部目录 |
 | `` 0 `` | 聚焦主视图 |  |

@@ -1,6 +1,8 @@
 package filetree
 
 import (
+	"slices"
+
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/common"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
@@ -17,6 +19,7 @@ type ICommitFileTree interface {
 	GetRoot() *CommitFileNode
 	SetTextFilter(filter string, useFuzzySearch bool)
 	GetTextFilter() string
+	SetCustomOrder(paths []string)
 }
 
 type CommitFileTree struct {
@@ -27,6 +30,8 @@ type CommitFileTree struct {
 	collapsedPaths *CollapsedPaths
 	textFilter     string
 	useFuzzySearch bool
+	// file paths in the order to show them in flat mode; nil means sorted by path
+	customOrder []string
 }
 
 func (self *CommitFileTree) CollapseAll() {
@@ -114,7 +119,34 @@ func (self *CommitFileTree) SetTree() {
 		self.tree = BuildTreeFromCommitFiles(filesForDisplay, showRootItem, cmp)
 	} else {
 		self.tree = BuildFlatTreeFromCommitFiles(filesForDisplay, showRootItem, cmp)
+		if self.customOrder != nil {
+			sortNodesByCustomOrder(self.tree.Children, self.customOrder)
+		}
 	}
+}
+
+// SetCustomOrder sets the order of files in flat mode (pass nil to sort by path
+// again). Call SetTree afterwards to apply it.
+func (self *CommitFileTree) SetCustomOrder(paths []string) {
+	self.customOrder = paths
+}
+
+// sortNodesByCustomOrder stably sorts file nodes to follow the given paths. Files
+// whose paths aren't in it go last, keeping their relative order.
+func sortNodesByCustomOrder(nodes []*Node[models.CommitFile], paths []string) {
+	indexByPath := make(map[string]int, len(paths))
+	for i, path := range paths {
+		indexByPath[path] = i
+	}
+	index := func(node *Node[models.CommitFile]) int {
+		if i, ok := indexByPath[node.File.Path]; ok {
+			return i
+		}
+		return len(paths)
+	}
+	slices.SortStableFunc(nodes, func(a, b *Node[models.CommitFile]) int {
+		return index(a) - index(b)
+	})
 }
 
 func (self *CommitFileTree) SetTextFilter(filter string, useFuzzySearch bool) {

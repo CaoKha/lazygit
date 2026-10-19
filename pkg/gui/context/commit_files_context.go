@@ -120,6 +120,14 @@ func FromAndToForDiff(ref models.Ref, refRange *types.RefRange) (string, string)
 }
 
 func (self *CommitFilesContext) ReInit(ref models.Ref, refRange *types.RefRange) {
+	// A custom file order only applies to the diff it was made for; keep it when
+	// we're re-initialised with the same one, e.g. on refresh.
+	if self.GetRef() != nil || self.GetRefRange() != nil {
+		oldFrom, oldTo := self.GetFromAndToForDiff()
+		if from, to := FromAndToForDiff(ref, refRange); from != oldFrom || to != oldTo {
+			self.SetCustomOrder(nil)
+		}
+	}
 	self.SetRef(ref)
 	self.SetRefRange(refRange)
 	if refRange != nil {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/common"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,4 +38,51 @@ func TestCommitFileTreeViewModelSetTreeClampsSelectionOnShrink(t *testing.T) {
 	for _, item := range items {
 		assert.NotNil(t, item)
 	}
+}
+
+func TestCommitFileTreeViewModelCustomOrder(t *testing.T) {
+	files := []*models.CommitFile{
+		{Path: "b/x"},
+		{Path: "a/y"},
+		{Path: "c"},
+		{Path: "a/z"},
+	}
+	viewModel := NewCommitFileTreeViewModel(
+		func() []*models.CommitFile { return files },
+		common.NewDummyCommon(),
+		false, // flat list
+	)
+	paths := func() []string {
+		return lo.Map(viewModel.GetAllItems(), func(node *CommitFileNode, _ int) string {
+			return node.GetPath()
+		})
+	}
+
+	viewModel.SetTree()
+	assert.Equal(t, []string{"a/y", "a/z", "b/x", "c"}, paths())
+
+	viewModel.SetCustomOrder([]string{"c", "a/z", "b/x", "a/y"})
+	viewModel.SetTree()
+	assert.Equal(t, []string{"c", "a/z", "b/x", "a/y"}, paths())
+
+	// filtering keeps the relative order
+	viewModel.SetFilter("a/", false)
+	assert.Equal(t, []string{"a/z", "a/y"}, paths())
+	viewModel.ClearFilter()
+	assert.Equal(t, []string{"c", "a/z", "b/x", "a/y"}, paths())
+
+	// the tree view is sorted as usual
+	viewModel.ToggleShowTree()
+	assert.Equal(t, []string{".", "a", "a/y", "a/z", "b", "b/x", "c"}, paths())
+	viewModel.ToggleShowTree()
+	assert.Equal(t, []string{"c", "a/z", "b/x", "a/y"}, paths())
+
+	// files that aren't in the order go last, sorted by path
+	files = append(files, &models.CommitFile{Path: "e"}, &models.CommitFile{Path: "d"})
+	viewModel.SetTree()
+	assert.Equal(t, []string{"c", "a/z", "b/x", "a/y", "d", "e"}, paths())
+
+	viewModel.SetCustomOrder(nil)
+	viewModel.SetTree()
+	assert.Equal(t, []string{"a/y", "a/z", "b/x", "c", "d", "e"}, paths())
 }

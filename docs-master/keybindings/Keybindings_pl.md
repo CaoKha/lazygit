@@ -295,6 +295,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 | `` a `` | Przełącz wszystkie pliki | Dodaj/usuń wszystkie pliki commita do niestandardowej łatki. Zobacz https://github.com/jesseduffield/lazygit#rebase-magic-custom-patches. |
 | `` <enter> `` | Focus file diff / Toggle directory | If a file is selected, focus its diff so you can act on individual lines. If it is a directory, collapse or expand it. |
 | `` ` `` | Przełącz widok drzewa plików | Toggle file view between flat and tree layout. Flat layout shows all file paths in a single list, tree layout groups files by directory.<br><br>The default can be changed in the config file with the key 'gui.showFileTree'. |
+| `` <ctrl+a> `` | AI sort files | Reorder the files into a reading order chosen by the command configured with the key 'git.commitFilesSortCommand'. Switches to flat layout, since the tree layout is always sorted by path. |
 | `` - `` | Collapse all files | Collapse all directories in the files tree |
 | `` = `` | Expand all files | Expand all directories in the file tree |
 | `` 0 `` | Focus main view |  |
