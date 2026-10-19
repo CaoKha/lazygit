@@ -1,0 +1,201 @@
+# Builds this fork on every push to its branch and publishes the binaries as a GitHub
+# release. It then points the fixed `channel` release's latest.json at the new build; the
+# local updater reads that file through a release download URL, which the GitHub API rate
+# limit does not cover.
+#
+# Version: <upstream release base>-fork.<UTC date>.<10000 + run number>, e.g.
+# v0.66.2-fork.20261019.10001. It always sorts after the upstream release it was built
+# from, and never matches the upstream tag filter (vX.Y.Z only). Ordering assumes the run
+# number only grows: it does for this workflow file, but renaming or recreating the
+# workflow restarts it, so a same-day build could then sort before an older one.
+name: Fork release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+
+# The build job gets a read-only token; only publish can write.
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPOSITORY: jesseduffield/lazygit
+  CHANNEL_TAG: channel
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Resolve version
+        id: version
+        run: |
+          set -euo pipefail
+          upstream="https://github.com/${UPSTREAM_REPOSITORY}.git"
+          git fetch --quiet --tags "$upstream"
+          # The newest upstream release this commit contains. Candidates come from
+          # upstream's tag list, and only vX.Y.Z: this fork's own tags carry a suffix.
+          base_tag=""
+          for tag in $(git ls-remote --tags --refs "$upstream" 'v*' | sed 's|.*refs/tags/||' |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -rV); do
+            if git merge-base --is-ancestor "$tag" HEAD; then base_tag="$tag"; break; fi
+          done
+          [ -n "$base_tag" ] || { echo "No upstream release in this history." >&2; exit 1; }
+          version="${base_tag#v}-fork.$(date -u +%Y%m%d).$((10000 + GITHUB_RUN_NUMBER))"
+          echo "Building ${version} from ${GITHUB_SHA} (upstream ${base_tag})"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+      - name: Unit tests
+        run: go test ./... -short
+      - name: Build archives
+        # Pure Go, so one Linux runner cross-compiles every platform. The ldflags match
+        # .goreleaser.yml, so `lazygit --version` shows the fork version; any build source
+        # other than buildBinary turns off lazygit's own updater, which would fetch
+        # upstream's release.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CGO_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p release
+          for target in darwin/arm64 linux/amd64; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            dir="$RUNNER_TEMP/${os}-${arch}"
+            mkdir -p "$dir"
+            GOOS="$os" GOARCH="$arch" go build -trimpath -o "$dir/lazygit" \
+              -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${GITHUB_SHA} -X main.date=${date} -X main.buildSource=fork"
+            tar -czf "release/lazygit_${VERSION}_${os}_${arch}.tar.gz" -C "$dir" lazygit
+          done
+          ls -l release
+      - name: Smoke-test the Linux binary
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          tar -xzf "release/lazygit_${VERSION}_linux_amd64.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/lazygit" --version | tee /dev/stderr | grep -F "version=${VERSION},"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: archives
+          path: release/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      TAG: v${{ needs.build.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Skip superseded builds
+        id: current
+        run: |
+          set -euo pipefail
+          head="$(gh api "repos/${GITHUB_REPOSITORY}/branches/${GITHUB_REF_NAME}" --jq .commit.sha)"
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            # Pushes touching only Markdown start no build, so this one is still the
+            # newest unless code changed since.
+            changed="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${GITHUB_SHA}...${head}" \
+              --jq '[.files[].filename | select(endswith(".md") | not)] | length')"
+            if [ "$changed" != "0" ]; then
+              echo "${GITHUB_REF_NAME} has moved on to ${head}; its own run publishes."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        if: steps.current.outputs.skip == 'false'
+        with:
+          name: archives
+          path: assets
+
+      - name: Publish release
+        if: steps.current.outputs.skip == 'false'
+        working-directory: assets
+        run: |
+          set -euo pipefail
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+          tag_exists() {
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1 ||
+              gh release view "$TAG" >/dev/null 2>&1
+          }
+          if tag_exists; then
+            echo "::error::${TAG} already exists; not replacing it."
+            exit 1
+          fi
+          # The releases API occasionally answers 403 for a moment; retry the create, but
+          # never touch a release or tag that an attempt already made.
+          for attempt in 1 2 3 4; do
+            if gh release create "$TAG" ./* \
+              --target "$GITHUB_SHA" \
+              --prerelease \
+              --title "lazygit fork ${VERSION}" \
+              --notes "Built from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}."; then
+              break
+            fi
+            if tag_exists; then
+              echo "::error::Creating ${TAG} failed part-way; inspect it before rerunning."
+              exit 1
+            fi
+            [ "$attempt" -lt 4 ] || exit 1
+            sleep $((attempt * 20))
+          done
+
+      - name: Update the channel release
+        if: steps.current.outputs.skip == 'false'
+        working-directory: assets
+        run: |
+          set -euo pipefail
+          base="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          asset() {
+            local name="lazygit_${VERSION}_$1.tar.gz"
+            [ -f "$name" ] || { echo "Missing ${name}." >&2; exit 1; }
+            jq -nc --arg name "$name" --arg url "${base}/${name}" \
+              --arg sha256 "$(sha256sum "$name" | cut -d' ' -f1)" \
+              '{name: $name, url: $url, sha256: $sha256}'
+          }
+          jq -n --arg version "$VERSION" --arg tag "$TAG" --arg commit "$GITHUB_SHA" \
+            --argjson mac "$(asset darwin_arm64)" --argjson linux "$(asset linux_amd64)" \
+            '{version: $version, tag: $tag, commit: $commit, assets: {"darwin-arm64": $mac, "linux-amd64": $linux}}' \
+            > latest.json
+          cat latest.json
+          if ! gh release view "$CHANNEL_TAG" >/dev/null 2>&1; then
+            gh release create "$CHANNEL_TAG" --target "$GITHUB_SHA" --prerelease \
+              --title "Fork update channel" \
+              --notes "latest.json names the newest fork build; upstream-status.json reports the last upstream sync. CI keeps both current." ||
+              gh release view "$CHANNEL_TAG" >/dev/null
+          fi
+          gh release upload "$CHANNEL_TAG" latest.json --clobber
+
+      - name: Prune old releases
+        if: steps.current.outputs.skip == 'false'
+        # Keep the newest 10 fork builds; the updater only needs the latest. Only fork
+        # version tags match, never the `channel` release.
+        run: |
+          set -euo pipefail
+          gh release list --limit 200 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | test("^v.*-fork\\."))] | sort_by(.createdAt) | reverse | .[10:] | .[].tagName' |
+            while read -r tag; do
+              gh release delete "$tag" --cleanup-tag --yes
+            done
