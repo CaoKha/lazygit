@@ -1066,9 +1066,6 @@ type capturedCommitFilesState struct {
 	from    string
 	to      string
 	reverse bool
-	// The diff's from ignoring diffing mode, for loading the file order saved for
-	// the diff; empty if the files already have a custom order.
-	orderFrom string
 	// Whether there is a commit to load the files of at all. The panel is only ever
 	// pointed at one by being entered, and a patch can now be built from a commit's diff
 	// without that — after which anything that refreshes the panel would otherwise be
@@ -1085,12 +1082,8 @@ func (self *RefreshHelper) captureCommitFilesState() capturedCommitFilesState {
 	}
 
 	from, to := commitFilesContext.GetFromAndToForDiff()
-	captured := capturedCommitFilesState{to: to, hasCommit: true}
-	if commitFilesContext.GetCustomOrder() == nil {
-		captured.orderFrom = from
-	}
-	captured.from, captured.reverse = self.c.Modes().Diffing.GetFromAndReverseArgsForDiff(from)
-	return captured
+	from, reverse := self.c.Modes().Diffing.GetFromAndReverseArgsForDiff(from)
+	return capturedCommitFilesState{from: from, to: to, reverse: reverse, hasCommit: true}
 }
 
 func (self *RefreshHelper) refreshCommitFilesContext(captured capturedCommitFilesState, env refreshEnv) error {
@@ -1102,26 +1095,9 @@ func (self *RefreshHelper) refreshCommitFilesContext(captured capturedCommitFile
 	if err != nil {
 		return err
 	}
-	var order []string
-	if captured.orderFrom != "" {
-		paths := lo.Map(files, func(file *models.CommitFile, _ int) string { return file.Path })
-		if from, to, err := env.git.Commit.GetFullHashes(captured.orderFrom, captured.to); err == nil {
-			if saved := config.LoadCommitFileOrder(from, to, paths); saved != "" {
-				order, _ = filetree.ParseFileOrder(self.c.Tr, paths, saved)
-			}
-		}
-	}
 	self.onUIThreadUnlessRepoChanged(env, func() {
 		self.c.Model().CommitFiles = files
-		commitFilesContext := self.c.Contexts().CommitFiles
-		// show the files as if they had just been sorted, unless the user has moved on
-		if from, to := commitFilesContext.GetFromAndToForDiff(); order != nil && from == captured.orderFrom && to == captured.to {
-			if commitFilesContext.InTreeMode() {
-				commitFilesContext.ToggleShowTree()
-			}
-			commitFilesContext.SetCustomOrder(order)
-		}
-		commitFilesContext.SetTree()
+		self.c.Contexts().CommitFiles.CommitFileTreeViewModel.SetTree()
 	})
 	self.refreshView(self.c.Contexts().CommitFiles, env)
 	return nil

@@ -10,7 +10,8 @@ var SortCommitFiles = NewIntegrationTest(NewIntegrationTestArgs{
 	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig: func(config *config.AppConfig) {
-		config.GetUserConfig().Git.CommitFilesSortCommand = "sort -r"
+		// fails when run a second time, so we can tell that the saved order is used instead
+		config.GetUserConfig().Git.CommitFilesSortCommand = "if [ -e .git/sorted ]; then exit 1; fi; touch .git/sorted; sort -r"
 	},
 	SetupRepo: func(shell *Shell) {
 		shell.CreateFileAndAdd("other", "")
@@ -97,7 +98,8 @@ var SortCommitFiles = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Files.ToggleTreeView).
 			PressEscape()
 
-		// entering the commit again restores its saved order in the flat view
+		// entering the commit again shows the files as usual, and sorting them
+		// again applies the saved order without running the command
 		t.Views().Commits().
 			IsFocused().
 			NavigateToLine(Contains("add files")).
@@ -106,9 +108,17 @@ var SortCommitFiles = NewIntegrationTest(NewIntegrationTestArgs{
 		t.Views().CommitFiles().
 			IsFocused().
 			Lines(
-				Equals("A dir/b").IsSelected(),
+				Equals("▼ /").IsSelected(),
+				Equals("  A c"),
+				Equals("  ▼ dir"),
+				Equals("    A a"),
+				Equals("    A b"),
+			).
+			Press(keys.CommitFiles.SortFiles).
+			Lines(
+				Equals("A dir/b"),
 				Equals("A dir/a"),
-				Equals("A c"),
+				Equals("A c").IsSelected(),
 			)
 	},
 })

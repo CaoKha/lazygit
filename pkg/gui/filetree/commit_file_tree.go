@@ -20,7 +20,6 @@ type ICommitFileTree interface {
 	SetTextFilter(filter string, useFuzzySearch bool)
 	GetTextFilter() string
 	SetCustomOrder(paths []string)
-	GetCustomOrder() []string
 }
 
 type CommitFileTree struct {
@@ -130,10 +129,6 @@ func (self *CommitFileTree) SetTree() {
 // again). Call SetTree afterwards to apply it.
 func (self *CommitFileTree) SetCustomOrder(paths []string) {
 	self.customOrder = paths
-}
-
-func (self *CommitFileTree) GetCustomOrder() []string {
-	return self.customOrder
 }
 
 // sortNodesByCustomOrder stably sorts file nodes to follow the given paths. Files

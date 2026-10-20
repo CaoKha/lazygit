@@ -591,9 +591,10 @@ func (self *CommitFilesController) toggleTreeView() error {
 	return nil
 }
 
-// sortFiles reorders the files with the user's sort command, which gets the paths
-// on stdin and prints them in the new order. It runs in the background, and if
-// it fails we only show a toast and leave the list as it is.
+// sortFiles reorders the files with the order saved for this diff, or else with
+// the user's sort command, which gets the paths on stdin and prints them in the
+// new order. The command runs in the background, and if it fails we only show a
+// toast and leave the list as it is.
 func (self *CommitFilesController) sortFiles() error {
 	paths := lo.Map(self.c.Model().CommitFiles, func(file *models.CommitFile, _ int) string {
 		return file.Path
@@ -603,6 +604,14 @@ func (self *CommitFilesController) sortFiles() error {
 	}
 
 	from, to := self.context().GetFromAndToForDiff()
+	fullFrom, fullTo, hashErr := self.c.Git().Commit.GetFullHashes(from, to)
+	if hashErr == nil {
+		if order, err := filetree.ParseFileOrder(self.c.Tr, paths, config.LoadCommitFileOrder(fullFrom, fullTo, paths)); err == nil {
+			self.applyFileOrder(order)
+			return nil
+		}
+	}
+
 	cmdObj := self.c.OS().Cmd.NewShell(self.c.UserConfig().Git.CommitFilesSortCommand, self.c.UserConfig().OS.ShellFunctionsFile).
 		SetStdin(strings.Join(paths, "\n") + "\n")
 
@@ -612,11 +621,9 @@ func (self *CommitFilesController) sortFiles() error {
 		if err == nil {
 			order, err = filetree.ParseFileOrder(self.c.Tr, paths, output)
 		}
-		if err == nil {
-			if fullFrom, fullTo, hashErr := self.c.Git().Commit.GetFullHashes(from, to); hashErr == nil {
-				if saveErr := config.SaveCommitFileOrder(fullFrom, fullTo, paths, order); saveErr != nil {
-					self.c.ErrorToast(fmt.Sprintf(self.c.Tr.SaveCommitFilesOrderFailed, saveErr.Error()))
-				}
+		if err == nil && hashErr == nil {
+			if saveErr := config.SaveCommitFileOrder(fullFrom, fullTo, paths, order); saveErr != nil {
+				self.c.ErrorToast(fmt.Sprintf(self.c.Tr.SaveCommitFilesOrderFailed, saveErr.Error()))
 			}
 		}
 
@@ -632,19 +639,25 @@ func (self *CommitFilesController) sortFiles() error {
 				return nil
 			}
 
-			viewModel := self.context().CommitFileTreeViewModel
-			if viewModel.InTreeMode() {
-				viewModel.ToggleShowTree()
-			}
-			selectedPath := viewModel.GetSelectedPath()
-			viewModel.SetCustomOrder(order)
-			viewModel.SetTree()
-			viewModel.SelectPath(selectedPath, self.c.UserConfig().Gui.ShowRootItemInFileTree)
-			self.c.PostRefreshUpdate(self.context())
+			self.applyFileOrder(order)
 			return nil
 		})
 		return nil
 	})
+}
+
+// applyFileOrder shows the files in the given order, switching to the flat view
+// and keeping the selection.
+func (self *CommitFilesController) applyFileOrder(order []string) {
+	viewModel := self.context().CommitFileTreeViewModel
+	if viewModel.InTreeMode() {
+		viewModel.ToggleShowTree()
+	}
+	selectedPath := viewModel.GetSelectedPath()
+	viewModel.SetCustomOrder(order)
+	viewModel.SetTree()
+	viewModel.SelectPath(selectedPath, self.c.UserConfig().Gui.ShowRootItemInFileTree)
+	self.c.PostRefreshUpdate(self.context())
 }
 
 func (self *CommitFilesController) collapseAll() error {
