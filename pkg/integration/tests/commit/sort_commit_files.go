@@ -93,8 +93,11 @@ var SortCommitFiles = NewIntegrationTest(NewIntegrationTestArgs{
 			Lines(
 				Equals("A other").IsSelected(),
 			).
+			// leave in the tree view
+			Press(keys.Files.ToggleTreeView).
 			PressEscape()
 
+		// entering the commit again restores its saved order in the flat view
 		t.Views().Commits().
 			IsFocused().
 			NavigateToLine(Contains("add files")).
@@ -103,9 +106,9 @@ var SortCommitFiles = NewIntegrationTest(NewIntegrationTestArgs{
 		t.Views().CommitFiles().
 			IsFocused().
 			Lines(
-				Equals("A c").IsSelected(),
+				Equals("A dir/b").IsSelected(),
 				Equals("A dir/a"),
-				Equals("A dir/b"),
+				Equals("A c"),
 			)
 	},
 })

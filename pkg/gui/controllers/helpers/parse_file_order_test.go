@@ -1,4 +1,4 @@
-package controllers
+package helpers
 
 import (
 	"testing"
@@ -54,7 +54,7 @@ func TestParseFileOrder(t *testing.T) {
 
 	for _, s := range scenarios {
 		t.Run(s.name, func(t *testing.T) {
-			order, err := parseFileOrder(i18n.EnglishTranslationSet(), paths, s.output)
+			order, err := ParseFileOrder(i18n.EnglishTranslationSet(), paths, s.output)
 			if s.expectedErr != "" {
 				assert.EqualError(t, err, s.expectedErr)
 				assert.Nil(t, order)

@@ -8,13 +8,13 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/commands/patch"
+	"github.com/jesseduffield/lazygit/pkg/config"
 	"github.com/jesseduffield/lazygit/pkg/constants"
 	"github.com/jesseduffield/lazygit/pkg/gocui"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/controllers/helpers"
 	"github.com/jesseduffield/lazygit/pkg/gui/filetree"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
-	"github.com/jesseduffield/lazygit/pkg/i18n"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 	"github.com/samber/lo"
 )
@@ -610,7 +610,13 @@ func (self *CommitFilesController) sortFiles() error {
 		output, _, err := cmdObj.RunWithOutputs()
 		var order []string
 		if err == nil {
-			order, err = parseFileOrder(self.c.Tr, paths, output)
+			order, err = helpers.ParseFileOrder(self.c.Tr, paths, output)
+		}
+		var saveErr error
+		if err == nil {
+			if fullFrom, fullTo, revParseErr := self.c.Git().Commit.GetFullHashes(from, to); revParseErr == nil {
+				saveErr = config.SaveCommitFileOrder(fullFrom, fullTo, paths, order)
+			}
 		}
 
 		self.c.OnUIThread(func() error {
@@ -618,6 +624,9 @@ func (self *CommitFilesController) sortFiles() error {
 				firstLine, _, _ := strings.Cut(strings.TrimSpace(err.Error()), "\n")
 				self.c.ErrorToast(fmt.Sprintf(self.c.Tr.SortCommitFilesFailed, firstLine))
 				return nil
+			}
+			if saveErr != nil {
+				self.c.ErrorToast(fmt.Sprintf(self.c.Tr.SaveCommitFilesOrderFailed, saveErr.Error()))
 			}
 
 			// the user may have moved on to another commit in the meantime
@@ -638,34 +647,6 @@ func (self *CommitFilesController) sortFiles() error {
 		})
 		return nil
 	})
-}
-
-// parseFileOrder parses the output of the sort command, which must contain each
-// of the given paths exactly once, one per line.
-func parseFileOrder(tr *i18n.TranslationSet, paths []string, output string) ([]string, error) {
-	remaining := lo.SliceToMap(paths, func(path string) (string, bool) { return path, true })
-	order := []string{}
-	for line := range strings.SplitSeq(output, "\n") {
-		path := strings.TrimSpace(line)
-		if path == "" {
-			continue
-		}
-		if !remaining[path] {
-			if lo.Contains(order, path) {
-				return nil, fmt.Errorf(tr.SortCommitFilesDuplicateFile, path)
-			}
-			return nil, fmt.Errorf(tr.SortCommitFilesUnknownFile, path)
-		}
-		delete(remaining, path)
-		order = append(order, path)
-	}
-	if len(remaining) == 1 {
-		return nil, errors.New(tr.SortCommitFilesMissingFile)
-	}
-	if len(remaining) > 1 {
-		return nil, fmt.Errorf(tr.SortCommitFilesMissingFiles, len(remaining))
-	}
-	return order, nil
 }
 
 func (self *CommitFilesController) collapseAll() error {

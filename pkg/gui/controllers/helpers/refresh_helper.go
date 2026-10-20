@@ -1,6 +1,8 @@
 package helpers
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -21,6 +23,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
 	"github.com/jesseduffield/lazygit/pkg/gui/style"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
+	"github.com/jesseduffield/lazygit/pkg/i18n"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 	"github.com/samber/lo"
 	"github.com/sasha-s/go-deadlock"
@@ -1066,6 +1069,9 @@ type capturedCommitFilesState struct {
 	from    string
 	to      string
 	reverse bool
+	// The diff's from ignoring diffing mode, for loading the file order saved for
+	// the diff; empty if the files already have a custom order.
+	orderFrom string
 	// Whether there is a commit to load the files of at all. The panel is only ever
 	// pointed at one by being entered, and a patch can now be built from a commit's diff
 	// without that — after which anything that refreshes the panel would otherwise be
@@ -1082,8 +1088,12 @@ func (self *RefreshHelper) captureCommitFilesState() capturedCommitFilesState {
 	}
 
 	from, to := commitFilesContext.GetFromAndToForDiff()
-	from, reverse := self.c.Modes().Diffing.GetFromAndReverseArgsForDiff(from)
-	return capturedCommitFilesState{from: from, to: to, reverse: reverse, hasCommit: true}
+	captured := capturedCommitFilesState{to: to, hasCommit: true}
+	if commitFilesContext.GetCustomOrder() == nil {
+		captured.orderFrom = from
+	}
+	captured.from, captured.reverse = self.c.Modes().Diffing.GetFromAndReverseArgsForDiff(from)
+	return captured
 }
 
 func (self *RefreshHelper) refreshCommitFilesContext(captured capturedCommitFilesState, env refreshEnv) error {
@@ -1095,12 +1105,57 @@ func (self *RefreshHelper) refreshCommitFilesContext(captured capturedCommitFile
 	if err != nil {
 		return err
 	}
+	var order []string
+	if captured.orderFrom != "" {
+		paths := lo.Map(files, func(file *models.CommitFile, _ int) string { return file.Path })
+		if from, to, err := env.git.Commit.GetFullHashes(captured.orderFrom, captured.to); err == nil {
+			if saved := config.LoadCommitFileOrder(from, to, paths); saved != "" {
+				order, _ = ParseFileOrder(self.c.Tr, paths, saved)
+			}
+		}
+	}
 	self.onUIThreadUnlessRepoChanged(env, func() {
 		self.c.Model().CommitFiles = files
-		self.c.Contexts().CommitFiles.CommitFileTreeViewModel.SetTree()
+		commitFilesContext := self.c.Contexts().CommitFiles
+		// show the files as if they had just been sorted, unless the user has moved on
+		if from, to := commitFilesContext.GetFromAndToForDiff(); order != nil && from == captured.orderFrom && to == captured.to {
+			if commitFilesContext.InTreeMode() {
+				commitFilesContext.ToggleShowTree()
+			}
+			commitFilesContext.SetCustomOrder(order)
+		}
+		commitFilesContext.SetTree()
 	})
 	self.refreshView(self.c.Contexts().CommitFiles, env)
 	return nil
+}
+
+// ParseFileOrder parses the output of the sort command, which must contain each
+// of the given paths exactly once, one per line.
+func ParseFileOrder(tr *i18n.TranslationSet, paths []string, output string) ([]string, error) {
+	remaining := lo.SliceToMap(paths, func(path string) (string, bool) { return path, true })
+	order := []string{}
+	for line := range strings.SplitSeq(output, "\n") {
+		path := strings.TrimSpace(line)
+		if path == "" {
+			continue
+		}
+		if !remaining[path] {
+			if lo.Contains(order, path) {
+				return nil, fmt.Errorf(tr.SortCommitFilesDuplicateFile, path)
+			}
+			return nil, fmt.Errorf(tr.SortCommitFilesUnknownFile, path)
+		}
+		delete(remaining, path)
+		order = append(order, path)
+	}
+	if len(remaining) == 1 {
+		return nil, errors.New(tr.SortCommitFilesMissingFile)
+	}
+	if len(remaining) > 1 {
+		return nil, fmt.Errorf(tr.SortCommitFilesMissingFiles, len(remaining))
+	}
+	return order, nil
 }
 
 // captureRebaseCommitState reads the rebase-commits refresh's model inputs into

@@ -60,6 +60,7 @@ type TranslationSet struct {
 	SortCommitFilesTooltip                string
 	SortingCommitFilesStatus              string
 	SortCommitFilesFailed                 string
+	SaveCommitFilesOrderFailed            string
 	SortCommitFilesMissingFile            string
 	SortCommitFilesMissingFiles           string
 	SortCommitFilesUnknownFile            string
@@ -1277,6 +1278,7 @@ func EnglishTranslationSet() *TranslationSet {
 		SortCommitFilesTooltip:               "Reorder the files into a reading order chosen by the command configured with the key 'git.commitFilesSortCommand'. Switches to flat layout, since the tree layout is always sorted by path.",
 		SortingCommitFilesStatus:             "Sorting files",
 		SortCommitFilesFailed:                "AI sort failed: %s",
+		SaveCommitFilesOrderFailed:           "Failed to save the file order: %s",
 		SortCommitFilesMissingFile:           "missing 1 file",
 		SortCommitFilesMissingFiles:          "missing %d files",
 		SortCommitFilesUnknownFile:           "unknown file %s",

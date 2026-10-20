@@ -154,6 +154,21 @@ func (self *CommitCommands) signoffFlag() string {
 	return ""
 }
 
+// GetFullHashes resolves the two ends of a diff to full hashes.
+func (self *CommitCommands) GetFullHashes(from, to string) (string, string, error) {
+	cmdArgs := NewGitCmd("rev-parse").Arg(from, to).ToArgv()
+
+	output, err := self.cmd.New(cmdArgs).DontLog().RunWithOutput()
+	if err != nil {
+		return "", "", err
+	}
+	hashes := strings.Fields(output)
+	if len(hashes) != 2 {
+		return "", "", fmt.Errorf("unexpected output of git rev-parse: %q", output)
+	}
+	return hashes[0], hashes[1], nil
+}
+
 func (self *CommitCommands) GetCommitMessage(commitHash string) (string, error) {
 	cmdArgs := NewGitCmd("log").
 		Arg("--format=%B", "--max-count=1", commitHash).
