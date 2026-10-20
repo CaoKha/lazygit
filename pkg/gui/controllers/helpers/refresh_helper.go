@@ -1,8 +1,6 @@
 package helpers
 
 import (
-	"errors"
-	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -23,7 +21,6 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
 	"github.com/jesseduffield/lazygit/pkg/gui/style"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
-	"github.com/jesseduffield/lazygit/pkg/i18n"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 	"github.com/samber/lo"
 	"github.com/sasha-s/go-deadlock"
@@ -1110,7 +1107,7 @@ func (self *RefreshHelper) refreshCommitFilesContext(captured capturedCommitFile
 		paths := lo.Map(files, func(file *models.CommitFile, _ int) string { return file.Path })
 		if from, to, err := env.git.Commit.GetFullHashes(captured.orderFrom, captured.to); err == nil {
 			if saved := config.LoadCommitFileOrder(from, to, paths); saved != "" {
-				order, _ = ParseFileOrder(self.c.Tr, paths, saved)
+				order, _ = filetree.ParseFileOrder(self.c.Tr, paths, saved)
 			}
 		}
 	}
@@ -1128,34 +1125,6 @@ func (self *RefreshHelper) refreshCommitFilesContext(captured capturedCommitFile
 	})
 	self.refreshView(self.c.Contexts().CommitFiles, env)
 	return nil
-}
-
-// ParseFileOrder parses the output of the sort command, which must contain each
-// of the given paths exactly once, one per line.
-func ParseFileOrder(tr *i18n.TranslationSet, paths []string, output string) ([]string, error) {
-	remaining := lo.SliceToMap(paths, func(path string) (string, bool) { return path, true })
-	order := []string{}
-	for line := range strings.SplitSeq(output, "\n") {
-		path := strings.TrimSpace(line)
-		if path == "" {
-			continue
-		}
-		if !remaining[path] {
-			if lo.Contains(order, path) {
-				return nil, fmt.Errorf(tr.SortCommitFilesDuplicateFile, path)
-			}
-			return nil, fmt.Errorf(tr.SortCommitFilesUnknownFile, path)
-		}
-		delete(remaining, path)
-		order = append(order, path)
-	}
-	if len(remaining) == 1 {
-		return nil, errors.New(tr.SortCommitFilesMissingFile)
-	}
-	if len(remaining) > 1 {
-		return nil, fmt.Errorf(tr.SortCommitFilesMissingFiles, len(remaining))
-	}
-	return order, nil
 }
 
 // captureRebaseCommitState reads the rebase-commits refresh's model inputs into

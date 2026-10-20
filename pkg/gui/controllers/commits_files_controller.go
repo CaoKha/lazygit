@@ -610,12 +610,13 @@ func (self *CommitFilesController) sortFiles() error {
 		output, _, err := cmdObj.RunWithOutputs()
 		var order []string
 		if err == nil {
-			order, err = helpers.ParseFileOrder(self.c.Tr, paths, output)
+			order, err = filetree.ParseFileOrder(self.c.Tr, paths, output)
 		}
-		var saveErr error
 		if err == nil {
-			if fullFrom, fullTo, revParseErr := self.c.Git().Commit.GetFullHashes(from, to); revParseErr == nil {
-				saveErr = config.SaveCommitFileOrder(fullFrom, fullTo, paths, order)
+			if fullFrom, fullTo, hashErr := self.c.Git().Commit.GetFullHashes(from, to); hashErr == nil {
+				if saveErr := config.SaveCommitFileOrder(fullFrom, fullTo, paths, order); saveErr != nil {
+					self.c.ErrorToast(fmt.Sprintf(self.c.Tr.SaveCommitFilesOrderFailed, saveErr.Error()))
+				}
 			}
 		}
 
@@ -624,9 +625,6 @@ func (self *CommitFilesController) sortFiles() error {
 				firstLine, _, _ := strings.Cut(strings.TrimSpace(err.Error()), "\n")
 				self.c.ErrorToast(fmt.Sprintf(self.c.Tr.SortCommitFilesFailed, firstLine))
 				return nil
-			}
-			if saveErr != nil {
-				self.c.ErrorToast(fmt.Sprintf(self.c.Tr.SaveCommitFilesOrderFailed, saveErr.Error()))
 			}
 
 			// the user may have moved on to another commit in the meantime
